@@ -1,0 +1,15 @@
+build/
+*.o
+*.lbl
+.DS_Store
+# never commit logins or macros (passwords): the C64's own files and any copies
+*.pwd
+*.PWD
+zencom.pwd*
+pwdtmp*
+zencom.mac*
+mactmp*
+# this machine's settings (e.g. the C64's address)
+local.mk
+# built by make (releases carry the program)
+dist/

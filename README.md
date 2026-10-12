@@ -13,7 +13,9 @@ screen has a way back.
 
 Switch between the two at any time with F7.
 
-![ANSI-80 preview](docs/zencom_ansi_preview.png)
+![ZenCom's main menu](docs/menu_preview.png)
+
+![ANSI-80: a board's menu in 80 columns](docs/zencom_ansi_preview.png)
 
 This is version 0.9.0: not yet 1.0. **Tested** so far: a C64 Ultimate (PAL)
 with its SwiftLink-type modem emulation and its SoftIEC drive; the

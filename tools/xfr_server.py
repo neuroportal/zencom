@@ -166,7 +166,7 @@ def serve(port, save, data, once, log):
                     t.send(b'\r\nUPLOAD %s\r\n> ' % (b'OK' if got is not None else b'FAILED'))
                 elif k == 'P':
                     t.send(b'\r\nSTART YOUR PUNTER DOWNLOAD\r\n')
-                    ok = punter.send(lambda to: t.getb(to), t.send, data, 0)
+                    ok = punter.send(lambda to: t.getb(to), t.send, data, 1)
                     log(f'punter send {"ok" if ok else "failed"}')
                     t.send(b'\r\nDOWNLOAD %s\r\n> ' % (b'OK' if ok else b'FAILED'))
                 elif k == 'O':
@@ -180,7 +180,7 @@ def serve(port, save, data, once, log):
                     t.send(b'\r\nMULTI-PUNTER: START YOUR BATCH\r\n')   # a CTRL-I header, then
                     time.sleep(2)                          # the CTRL-D end (as CCGMS sends)
                     ok = True
-                    for name, d, ft in ((b'MULTI ONE,P', data, 0), (b'MULTI,TWO,S', MULTI2, 1)):
+                    for name, d, ft in ((b'MULTI ONE,P', data, 1), (b'MULTI,TWO,S', MULTI2, 2)):
                         t.send(b'\x09' * 16 + name + b'\r')
                         seen = []                          # (the tokens, for the log)
                         def get(to, seen=seen):
@@ -214,7 +214,7 @@ def serve(port, save, data, once, log):
                         first = t.getb(1)
                         if first is not None: break
                     pending = [first] if first is not None else []
-                    ok = punter.send(lambda to: pending.pop() if pending else t.getb(to), t.send, data, 0)
+                    ok = punter.send(lambda to: pending.pop() if pending else t.getb(to), t.send, data, 1)
                     log(f'punter G send {"ok" if ok else "failed"}')
                     t.send(b'\r\nDOWNLOAD %s\r\n> ' % (b'OK' if ok else b'FAILED'))
                 elif k == 'C':                             # a page, cleared (PETSCII CLR), the next

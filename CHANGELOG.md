@@ -6,6 +6,23 @@ something existing (for example the settings file or BBS list format).
 The version lives in `VERSION` and is shown on the menu and help screens.
 Until 1.0.0, 0.x versions may still change things.
 
+## 0.9.1 (2026-10-14)
+
+### Fixed
+- Punter uploads to boards that skip the file-type phase (Particles: the
+  board answered BAD for ever, 0 blocks sent).  Such a board asks for the
+  data phase's 7-byte header at once, so the 8-byte file-type block never
+  passed its check.  After four BADs on that block ZenCom now goes
+  straight to the data.
+- Punter uploads to boards behind a bridge that reads telnet without
+  negotiating it ($FF $FF arriving as one $FF): until a block gets
+  through, every second BAD switches $FF doubling on or off for the call.
+- Punter's file-type byte is now the standard one (1 PRG, 2 SEQ; was 0
+  and 1), both ways.
+- The Punter nudge during a call no longer says the board is sending:
+  Punter opens with GOO both ways, so it now reads "Punter: C=+D to
+  download, C=+U to upload".
+
 ## 0.9.0 (2026-10-12)
 
 The first public release, renumbered: the 1.1-1.5.0 below were private

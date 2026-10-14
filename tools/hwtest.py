@@ -303,7 +303,7 @@ def transfer_tests():
     # ---- a C64-style board: GOO nudge, C=+D starts Punter, name from its list
     keys(typed('g')); time.sleep(2)
     keys(typed('123\n')); time.sleep(5)
-    check('nudge: "press C=+D" shown', any('press C=+D' in r for r in screen80()))
+    check('nudge: C=+D shown', any('C=+D' in r for r in screen80()))
     keys([0xAC]); time.sleep(3)                           # C=+D: the start screen waits
     rows = screen40()
     check('start: the file guessed and Punter offered', '4!SPY VS SPY' in rows[6]

@@ -118,7 +118,9 @@ xget:
     pla
     jsr term_putc
     jmp @l
-@cr: ldx x_crnul            ; non-binary telnet sends CR as CR NUL
+@cr: bit tn_seen            ; ($80: a bridge that only doubles $FF)
+    bmi @data
+    ldx x_crnul             ; non-binary telnet sends CR as CR NUL
     beq @c2
     ldx #0
     stx x_crnul
@@ -149,6 +151,8 @@ xput:
     jmp ser_put
 @cr: cmp #$0D
     bne @r
+    bit tn_seen             ; ($80: $FF only)
+    bmi @r
     ldx tn_bin_out
     bne @r
     lda #0
@@ -1102,7 +1106,8 @@ pt_recv:
     jsr pt_rblock
     bcc @k2
     jmp @fail
-@k2: lda XB_RX+7             ; the file type: 0 PRG, 1 SEQ
+@k2: lda XB_RX+7             ; the file type: 1 PRG, 2 SEQ, 3 USR -> 0 PRG,
+    lsr                     ; 1 SEQ (0 from older senders: PRG)
     sta pt_ftype
     ldx #T_GOO
     ldy #T_ACK
@@ -1197,6 +1202,7 @@ pt_send:
     sta pt_phase
     sta pt_done
     sta pt_unacked
+    sta pt_okd
     sta pt_blk
     sta pt_blk+1
     sta x_eof
@@ -1209,12 +1215,12 @@ pt_send:
     sta XB_PEND+6
     lda #0
     sta XB_PEND+4
-    lda x_type              ; 0 = PRG, 1 = SEQ
+    lda x_type              ; 1 = PRG, 2 = SEQ (as CCGMS)
     cmp #'S'
     beq @t1
-    lda #0
+    lda #1
     .byte $2C
-@t1: lda #1
+@t1: lda #2
     sta XB_PEND+7
     jsr pt_seal
 @loop:
@@ -1243,6 +1249,7 @@ pt_send:
     bne @t2
     lda pt_unacked          ; GOO: the block got through
     beq @ackit
+    sta pt_okd
     lda #0
     sta pt_unacked
     jsr pt_next
@@ -1262,8 +1269,13 @@ pt_send:
     lda #0                  ; BAD: send it again when asked
     sta pt_unacked
     inc xm_retries
+    jsr pt_ffesc
+    bcs @disk
     jsr xfr_progress
     jmp @ackit
+@disk:
+    lda #ERR_DISK
+    jmp xm_fail
 @t3: lda #<tk_sb
     ldy #>tk_sb
     jsr pt_is
@@ -1309,6 +1321,38 @@ pt_send:
     rts
 @loop2:
     jmp @loop
+
+; Until a block gets through, BADs adjust to the board.  Every second one
+; switches $FF doubling on or off (tn_seen $80), for the rest of the call:
+; a raw board may sit behind a bridge that reads telnet, so $FF $FF
+; arrives as one $FF.  The 4th on phase A's block: the board doesn't do
+; phase A (Particles: it asks for phase B's 7-byte header straight away,
+; so the 8-byte type block always failed its check), so skip to phase B.
+; C=1: a disk error.
+pt_ffesc:
+    lda pt_okd
+    bne @ok
+    lda pt_phase
+    bne @t
+    lda xm_retries
+    cmp #4
+    bne @t
+    inc pt_phase
+    lda #0
+    sta pt_done
+    jsr pt_header
+    bcs @r
+@t: lda xm_retries
+    lsr
+    bcs @ok
+    lda tn_seen
+    and #$7F
+    bne @ok                 ; (real telnet: leave it)
+    lda tn_seen
+    eor #$80
+    sta tn_seen
+@ok: clc
+@r: rts
 
 pt_get3w:                   ; a token, skipping noise; C=1 timeout
     lda #0
@@ -3192,7 +3236,8 @@ FIN_ROWS = 14               ; lines shown (rows 8-21)
 
 goo_watch:                  ; A = a byte from the board (kept): two GOOs
     jsr phrase_watch        ; (and the board's words for "start it now")
-    pha                     ; running = a Punter sender waiting: say so
+    pha                     ; running = Punter waiting (a sender or a
+                            ; receiver: both open with GOO): say so
     ldx gw_i                ; once
     cmp pf_goo,x
     bne @miss
@@ -4038,6 +4083,7 @@ pt_cyc:     .byte 0, 0
 pt_phase:   .byte 0
 pt_done:    .byte 0
 pt_unacked: .byte 0
+pt_okd:     .byte 0             ; a block has got through (this send)
 pt_blk:     .byte 0, 0
 pt_blen:    .byte 0
 pt_nrx:     .byte 0

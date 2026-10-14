@@ -47,6 +47,7 @@ class Rig:
         self.queue, self.sent, self.out = [], [], bytearray()
         self.on_put = lambda b: None
         self.on_fill = lambda: b''
+        self.on_tick = None                     # called once a jiffy
         self.inq = None
 
     def send(self, data):
@@ -76,6 +77,7 @@ class Rig:
             if i % 400 == 0:                                       # jiffy clock
                 m[0xA2] = (m[0xA2] + 1) & 255
                 if m[0xA2] == 0: m[0xA1] = (m[0xA1] + 1) & 255
+                if self.on_tick: self.on_tick()
             mpu.step()
         raise RuntimeError('timeout')
 
@@ -290,4 +292,139 @@ def test_punter_send_to_reference_receiver():
     th = threading.Thread(target=lambda: res.setdefault('r', punter.recv(get, put)), daemon=True); th.start()
     assert rig.run('pt_send', steps=60_000_000)
     th.join(30)
-    assert res.get('r') is not None and res['r'][0] == data and res['r'][1] == 1
+    assert res.get('r') is not None and res['r'][0] == data and res['r'][1] == 2   # SEQ
+
+
+# ---- Punter upload to a C64 board (as Particles): CCGMS's receiver
+# (rectype/receive/receive_block/accept/recmodem in its punter.s), timed in
+# jiffies, with a delay each way (the internet) and 2400 baud into the board.
+# Its habits: every code it sends first clears its input buffer; a token
+# counts only with nothing after it; a block is read byte by byte, and if
+# nothing comes within ~0.4 s it sends S/B again.  (So a round trip much
+# over 1/3 s defeats it whatever the sender does.)  With iac, the board sits
+# behind a bridge that reads telnet without ever negotiating it: an
+# undoubled $FF $FF arrives as one $FF, phase A's block is a byte short, and
+# the board answers BAD for ever (Particles, 0.9.0: GOO, S/B, BAD, hundreds
+# of retries, 0 blocks).  0.9.1 switches $FF doubling on after BADs there.
+# Without phase_a, the board skips the file-type phase and asks for the
+# 7-byte header at once, as Particles turned out to (2026-10-14): every
+# 8-byte type block failed its check, BAD for ever.
+def c64_board(rig, delay=10, cps_per_jiffy=4, accept_t=31, rec_t=22, pause=20, iac=False,
+              phase_a=True):
+    st = {'iac': 0, 'now': 0, 'up_t': 0.0, 'up': [], 'down': [], 'inbox': [],
+          'wait': None, 'kind': None, 'res': None, 'gen': None}
+    GOO, BAD, ACK, SB, SYN = punter.TOKENS
+    def send(code):
+        st['inbox'].clear()                         # rs232_clear
+        st['down'].append((st['now'] + delay, code))
+    def get(t): return (yield ('get', t))
+    def sleep(t): yield ('sleep', t)
+    def accept(want):
+        w = b''
+        while True:
+            b = yield from get(accept_t)
+            if b is None:
+                yield from sleep(pause); return None
+            w = (w + bytes([b]))[-3:]
+            if w in want and not st['inbox']: return w
+    def recmodem(n):
+        buf = b''
+        while len(buf) < n:
+            b = yield from get(rec_t)
+            if b is None:
+                yield from sleep(pause); return ('short' if buf else 'nodata'), buf
+            buf += bytes([b])
+            if buf == ACK and not st['inbox']: return 'ack', buf
+        return 'good', buf
+    def good(buf, n):
+        if len(buf) != n: return False
+        add, cyc = punter.checksums(buf[4:])
+        return buf[0] | buf[1] << 8 == add and buf[2] | buf[3] << 8 == cyc
+    def receive_block(code, size, end):
+        yield from sleep(pause)
+        while True:
+            send(code)
+            if (yield from accept((ACK,))) or (yield from accept((ACK,))): break
+        while True:
+            yield from sleep(pause)
+            send(SB)
+            if end and code == GOO:
+                if not (yield from accept((SYN,))): continue
+                for _ in range(10):
+                    send(SYN)
+                    if (yield from accept((SB,))): break
+                return None
+            stat, buf = yield from recmodem(size)
+            if stat in ('nodata', 'ack'): continue
+            return buf
+    def board():
+        size, code, ftype = 8, GOO, None                # rectype
+        while phase_a:
+            buf = yield from receive_block(code, size, ftype is not None)
+            if ftype is not None: break
+            if good(buf, size): ftype, code = buf[7], GOO
+            else: code = BAD
+        data, size, code, end = b'', 7, GOO, False      # receive
+        while True:
+            buf = yield from receive_block(code, size, end)
+            if end: return data, ftype
+            if good(buf, size):
+                data += buf[7:]
+                end = buf[6] == 0xFF
+                size, code = buf[4], GOO
+            else: code = BAD
+    def step(v):
+        try: kind, t = st['gen'].send(v)
+        except StopIteration as e: st['kind'], st['res'] = None, ('done', e.value); return
+        st['kind'], st['wait'] = kind, st['now'] + t
+    def tick():
+        st['now'] += 1
+        while st['down'] and st['down'][0][0] <= st['now']:
+            rig.queue += list(st['down'].pop(0)[1])
+        while st['up'] and st['up'][0][0] <= st['now']:
+            st['inbox'].append(st['up'].pop(0)[1])
+        if st['gen'] is None:
+            st['gen'] = board(); step(None)
+        while st['kind']:
+            if st['kind'] == 'get' and st['inbox']: step(st['inbox'].pop(0))
+            elif st['now'] >= st['wait']: step(None)
+            else: break
+    def on_put(b):
+        if iac:                             # a bridge that reads telnet: FF FF = FF,
+            if st['iac'] == 1:              # FF + a command = gone
+                st['iac'] = 2 if 0xFB <= b <= 0xFE else 0
+                if b != 0xFF: return
+            elif st['iac'] == 2: st['iac'] = 0; return
+            elif b == 0xFF: st['iac'] = 1; return
+        st['up_t'] = max(st['up_t'], st['now'] + delay) + 1 / cps_per_jiffy
+        st['up'].append((st['up_t'], b))
+    rig.on_put, rig.on_tick = on_put, tick
+    return st
+
+def punter_to_board(data, **kw):
+    rig = Rig(binary=False)                 # raw TCP, as Particles
+    chunks = [data[i:i + 248] for i in range(0, len(data), 248)]
+    rig.on_fill = lambda: chunks.pop(0) if chunks else b''
+    rig.m[lbl['x_type']] = ord('P')
+    st = c64_board(rig, **kw)
+    if kw.get('iac'): rig.m[lbl['tn_seen']] = 0     # it never negotiates
+    ok = rig.run('pt_send', steps=40_000_000)
+    for _ in range(600):                    # let the board finish its end
+        if st['res']: break
+        rig.on_tick()
+    return ok, st['res'] and st['res'][1], rig.m[lbl['xm_retries']]
+
+def test_punter_send_to_a_c64_board():
+    data = bytes((i * 13 + 7) & 255 for i in range(900)) + b'\xff\r end'
+    for delay in (2, 10):                   # near, and 1/6 s each way
+        for iac in (False, True):           # a plain bridge, one that reads telnet
+            ok, res, retries = punter_to_board(data, delay=delay, iac=iac)
+            assert ok and res == (data, 1), (delay, iac, ok, res and len(res[0]), retries)
+            assert retries <= (3 if iac else 0), (delay, iac, retries)
+
+def test_punter_send_to_a_board_without_phase_a():
+    data = bytes((i * 29 + 1) & 255 for i in range(700))
+    for iac in (False, True):
+        ok, res, retries = punter_to_board(data, delay=10, iac=iac, phase_a=False)
+        assert ok and res and res[0] == data, (iac, ok, res and len(res[0]), retries)
+        assert retries <= 8, (iac, retries)

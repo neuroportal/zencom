@@ -96,7 +96,8 @@ def recv(get, put, patience=60):
     return data, a[7]
 
 
-def send(get, put, data, ftype=0, timeout=10.0):
+def send(get, put, data, ftype=1, timeout=10.0):
+    # ftype: 1 PRG, 2 SEQ (as CCGMS)
     """Send a file by answering the receiver's tokens.  True when done."""
     chunks = [data[i:i + MAXDATA] for i in range(0, len(data), MAXDATA)]
     def phase_b():

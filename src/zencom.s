@@ -974,7 +974,7 @@ msg_off:
 msg_on:
     .byte 13, 10, "-- Connected --", 13, 10, 0
 msg_goo:
-    .byte 13, 10, "-- The board is sending (Punter): press C=+D --", 13, 10, 0
+    .byte 13, 10, "-- Punter: C=+D to download, C=+U to upload --", 13, 10, 0
 msg_sbansi:
     .byte 13, 10, "-- Scroll-back (C=+B) is for PETSCII mode so far --", 13, 10, 0
 msg_noxfr:

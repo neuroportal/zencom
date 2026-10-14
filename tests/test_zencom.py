@@ -942,7 +942,7 @@ def test_type_guess():
 def test_goo_nudge_once():
     t = fresh()
     for b in b'GOOGOOGOOGOOGOO': t.call('goo_watch', b)
-    assert sum('The board is sending (Punter)' in r for r in t.text()) == 1
+    assert sum('Punter: C=+D to download, C=+U to upload' in r for r in t.text()) == 1
     t2 = fresh()
     for b in b'GOOD GOOD': t2.call('goo_watch', b)
     assert not any('Punter' in r for r in t2.text())

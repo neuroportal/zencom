@@ -253,4 +253,5 @@ MIT. Copyright (c) 2026 Neuroportal. See `LICENSE` (`LICENCE` on the disk).
 
 ## Contact
 
-zencom@neuroportal.net
+zencom@neuroportal.net, or start a discussion on
+[GitHub](https://github.com/neuroportal/zencom/discussions).

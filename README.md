@@ -82,17 +82,29 @@ RUN
 ```
 
 Use your drive's number instead of 8 if it differs. On an Ultimate, change
-to ZenCom's folder first, for example:
+to ZenCom's folder on its software drive first. From firmware 1.2 that
+drive sees only its partitions (F1, Software IEC, Show Partitions), and a
+full path starts from the partition's root, as on a CMD drive or SD2IEC.
+With partition 1 on the SD card (`/SD/`):
 
 ```
-OPEN15,11,15,"CD:/SD/ZENCOM":CLOSE15
+OPEN15,11,15,"CD//ZENCOM":CLOSE15
 LOAD"ZENCOM",11
 RUN
 ```
 
-If ZenCom is started from the Ultimate's file browser, set SoftIEC's
-*Default Path* to ZenCom's folder, or the menu will say ZenCom's files
-were not found.
+Before firmware 1.2 the first line was `OPEN15,11,15,"CD:/SD/ZENCOM":CLOSE15`.
+
+If you move your Ultimate to firmware 1.2 or later, use ZenCom 0.9.2 or
+later: older versions can't open folders given as a path (with a `/`)
+there. ZenCom 0.9.2 should still work on older firmware (it falls back
+to the old form), but that hasn't been tested yet.
+
+To start ZenCom from the Ultimate's file browser, first point the
+software drive at ZenCom's folder, or the menu will say ZenCom's files
+were not found. From firmware 1.2: open ZenCom's folder, then F1,
+Software IEC, Set Partition here (and Save Partitions to keep it). Before
+1.2: set SoftIEC's *Default Path* to ZenCom's folder.
 
 ## The menu
 
@@ -199,7 +211,10 @@ own protocol, single files and Multi-Punter batches (receive).
 
 Where the BBS list, downloads, uploads and ZenCom's own files live: each a
 drive number and an optional folder. A blank drive means the one ZenCom
-was loaded from; a blank folder means the drive's current folder. Also the
+was loaded from; a blank folder means the drive's current folder. A
+folder without a leading `/` is inside ZenCom's folder (`DOWNLOADS`); one
+with it is a full path from the drive's root (`/DOWNLOADS`; on an
+Ultimate from firmware 1.2, the root of the drive's partition). Also the
 **SwiftLink speed** (1200 to 38400; blank = 9600).
 
 Saved to `ZENCOM.CFG` (SEQ) in ZenCom's folder. With no file, everything

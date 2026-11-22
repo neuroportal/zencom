@@ -1395,8 +1395,9 @@ dos_go:                     ; cur_dev, X/Y = folder (0-terminated; blank =
     bcs @no
     ldy #0
     lda (src),y
-    bne cd_go_src
-    jsr dos_status          ; no folder: just check the drive is there
+    beq @nf
+    jmp cd_go_src           ; (CODE2)
+@nf: jsr dos_status         ; no folder: just check the drive is there
     cmp #$FF
     beq @no
     clc
@@ -1405,6 +1406,7 @@ dos_go:                     ; cur_dev, X/Y = folder (0-terminated; blank =
     sec
     rts
 
+    .segment "CODE2"        ; cd_go and cd_origin (room)
 cd_go:                      ; X/Y = folder (0-terminated): CD:<folder> on
     stx src                 ; cur_dev, counting the levels.  C=1: failed
     sty src+1
@@ -1416,19 +1418,61 @@ cd_go_src:
     cpx #3
     bne @c1
     ldy #0
+    sty cd_add
 @c2: lda (src),y
     sta CMD_BUF,x
     beq @c3
-    inx
+    cmp #'/'                ; a "/" anywhere: CMD style, CD/PATH/ (CMD,
+    bne @c2n                ; SD2IEC, the Ultimate from firmware 1.2, where
+    sta CMD_BUF+2           ; CD: takes one name; CD//PATH/ from the root)
+@c2n: inx
     iny
     bne @c2
-@c3: txa
+@c3: lda CMD_BUF+2
+    cmp #'/'
+    bne @snd
+    lda CMD_BUF-1,x
+    cmp #'/'
+    beq @snd
+    lda #'/'                ; ... ending in "/"
+    sta CMD_BUF,x
+    inx
+    inc cd_add
+    lda #0
+    sta CMD_BUF,x
+@snd: txa
+    pha
     ldx #<CMD_BUF
     ldy #>CMD_BUF
     jsr dos_cmd
     cmp #0
-    bne @no                 ; no drive, or the folder isn't there
-    ldx cur_dev
+    beq @sent
+    lda CMD_BUF+2
+    cmp #'/'
+    bne @nop                ; no drive, or the folder isn't there
+    lda #':'                ; refused: CD:PATH (the Ultimate before 1.2)
+    sta CMD_BUF+2
+    pla
+    sec
+    sbc cd_add
+    tax
+    lda #0
+    sta CMD_BUF,x
+    sta cd_add
+    txa
+    pha
+    ldx #<CMD_BUF
+    ldy #>CMD_BUF
+    jsr dos_cmd
+    cmp #0
+    bne @nop
+@sent: pla
+    tax
+    lda cd_add              ; count the levels without the added "/"
+    beq @cnt
+    lda #0
+    sta CMD_BUF-1,x
+@cnt: ldx cur_dev
     lda CMD_BUF+3
     cmp #'/'
     beq @lost               ; a full path: count lost
@@ -1449,7 +1493,8 @@ cd_go_src:
     sta cd_depth-8,x
 @ok: clc
     rts
-@no: sec
+@nop: pla
+    sec
     rts
 
 cd_origin:                  ; cur_dev back to ZenCom's folder.  C=1: failed
@@ -1495,6 +1540,7 @@ cd_origin:                  ; cur_dev back to ZenCom's folder.  C=1: failed
 @no: sec
     rts
 
+    .segment "CODE"
 cd_up:    .byte "CD:_"      ; "_" = $5F, the C64's left arrow: parent folder
 cd_up2:   .byte "CD:.."
 dev_present:                ; is drive cur_dev on the bus?  C=1: no
@@ -7790,6 +7836,7 @@ dl_count:  .byte 0             ; DOWNLOADn names this session
 rc_pos:    .byte 0
 last_len:  .byte 0             ; length of the last line typed (line_buf)
 cd_depth:  .res 23, 0          ; drives 8-30: folders below ZenCom's ($FF lost)
+cd_add:    .byte 0             ; cd_go: 1 = a "/" added at the end (CD/PATH/)
 pborder:   .byte 0
 lost_at:   .byte 0
 nc_idx:    .byte 0

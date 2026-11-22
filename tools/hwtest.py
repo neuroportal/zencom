@@ -67,6 +67,20 @@ def var(name): return read(LBL[name], 1)[0]
 
 
 FTP_DIR = os.environ.get('ZENCOM_DIR', 'SD/ZenCom')
+# Firmware 1.2 and later: SoftIEC reaches only its partitions, and a full
+# path is CMD style (CD//PATH, from the partition's root). ZENCOM_IEC_ROOT
+# is the folder partition 1 points at ('SD' = /SD/); '' for older firmware,
+# where CD:/SD/ZENCOM reached any folder.
+IEC_ROOT = os.environ.get('ZENCOM_IEC_ROOT', 'SD')
+
+def iec_cd(ftp_dir):
+    """the CD command that takes drive 11 to ftp_dir (an FTP path)"""
+    if not IEC_ROOT:
+        return f'cd:/{ftp_dir}'
+    root = IEC_ROOT.strip('/') + '/'
+    if not (ftp_dir.strip('/') + '/').lower().startswith(root.lower()):
+        sys.exit(f'{ftp_dir} is outside the SoftIEC partition ({IEC_ROOT})')
+    return 'cd//' + ftp_dir.strip('/')[len(root):]
 
 def _ftp():
     """Python's own FTP client: no curl child process (macOS crashes a
@@ -220,8 +234,10 @@ def transfer_tests():
     time.sleep(1)
     keys([0x89]); time.sleep(1.5)                         # F2: ACIA + ANSI
     keys(typed(f'atd {mac}:6464\n'))
-    rows = wait_for(screen80, 'ZENCOM TEST BOARD', 25)
-    check('transfer: dialled the test board', rows is not None, f'mac={mac} log={log[-3:]}')
+    time.sleep(5)                     # no reads while the banner arrives: from Ultimate
+    rows = wait_for(screen80, 'TEST BOARD', 25, every=2.5)   # firmware 1.2 a memory
+    check('transfer: dialled the test board', rows is not None,   # read (DMA) drops bytes
+          f'mac={mac} log={log[-3:]}')
     if rows is None: return finish()
     # ---- download
     keys(typed('d')); time.sleep(1)
@@ -691,7 +707,7 @@ def launch():
     """Reset and start ZenCom from BASIC, off the SoftIEC drive."""
     http('PUT', '/machine:reset')
     time.sleep(4)
-    keys(typed(f'open15,11,15,"cd:/{FTP_DIR.lower()}":close15\n'))   # (ZENCOM_DIR)
+    keys(typed(f'open15,11,15,"{iec_cd(FTP_DIR).lower()}":close15\n'))   # (ZENCOM_DIR)
     time.sleep(2)
     keys(typed('load"zencom"'))
     keys(typed(',11\nrun\n'))                            # RUN waits in the buffer

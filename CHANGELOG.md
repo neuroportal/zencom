@@ -6,6 +6,26 @@ something existing (for example the settings file or BBS list format).
 The version lives in `VERSION` and is shown on the menu and help screens.
 Until 1.0.0, 0.x versions may still change things.
 
+## 0.9.2 (2026-11-22)
+
+### Fixed
+- Folders with a `/` in them (a full path such as `/DOWNLOADS`, or two
+  levels such as `UPLOADS/C64`, also when the upload browser opens a
+  folder inside a folder) on the C64 Ultimate with firmware 1.2 or later.
+  Its software drive now works as CMD drives and SD2IEC do: `CD:` takes
+  one folder name, and a longer path goes as `CD/PATH/` (`CD//PATH/`
+  from the root of the drive's partition). ZenCom now sends that, and
+  the old `CD:PATH` only if a drive refuses it.
+- The read-me explains starting ZenCom on firmware 1.2 and later, where
+  the software drive's partitions replace its Default Path.
+
+### Note
+- On an Ultimate with firmware 1.2 or later, use 0.9.2: 0.9.1 can't open
+  folders given as a path there. Folder names without a `/` work in both.
+- 0.9.2 should still work on older Ultimate firmware (a refused `CD/PATH/`
+  is sent again the old way), but that is so far tested only in the
+  emulator tests. VICE with a true-drive 1541: PAL and NTSC 20/20.
+
 ## 0.9.1 (2026-10-14)
 
 ### Fixed

@@ -746,16 +746,34 @@ def test_short_folders_are_inside_zencoms_folder():
     run, t = _drive_rig({C['C_DPATH']: 'DOWNLOADS', C['C_UPATH']: 'UPLOADS/C64'})
     L_LIST, L_DOWN, L_UP = 0, 1, 2
     assert run(L_DOWN) == ['CD:DOWNLOADS']
-    assert run(L_UP) == ['CD:..', 'CD:UPLOADS/C64']                 # up, then the sibling
+    assert run(L_UP) == ['CD:..', 'CD/UPLOADS/C64/']               # up, then the sibling (CMD style)
     assert run(L_LIST) == ['CD:..', 'CD:..']                        # blank: ZenCom's folder
     assert run(L_LIST) == []                                        # already there
 
 def test_full_paths_return_via_zencoms_folder_setting():
     C = dict(C_LPATH=3, C_DPATH=45, C_HPATH=126)
     run, t = _drive_rig({C['C_DPATH']: '/USB1/DL', C['C_HPATH']: '/USB1/ZC'})
-    assert run(1) == ['CD:/USB1/DL']
-    assert run(0) == ['CD:/USB1/ZC']                                # back via the setting
-    assert run(1) == ['CD:/USB1/DL']
+    assert run(1) == ['CD//USB1/DL/']                               # CMD style
+    assert run(0) == ['CD//USB1/ZC/']                               # back via the setting
+    assert run(1) == ['CD//USB1/DL/']
+
+def test_full_path_falls_back_to_the_old_ultimate_form():
+    """the Ultimate before firmware 1.2 took CD:/PATH, not CD//PATH"""
+    C = dict(C_DPATH=45, C_HPATH=126)
+    run, t = _drive_rig({C['C_DPATH']: '/USB1/DL', C['C_HPATH']: '/USB1/ZC'},
+                        refuse=('CD//USB1/DL/', 'CD//USB1/ZC/', 'CD/UPLOADS/C64/'))
+    assert run(1) == ['CD//USB1/DL/', 'CD:/USB1/DL']
+    assert run(0) == ['CD//USB1/ZC/', 'CD:/USB1/ZC']
+    run, t = _drive_rig({87: 'UPLOADS/C64'}, refuse=('CD/UPLOADS/C64/',))
+    assert run(2) == ['CD/UPLOADS/C64/', 'CD:UPLOADS/C64']
+    assert t.mpu.memory[lbl['cd_depth'] + 3] == 2                   # drive 11: two levels down
+    assert run(0) == ['CD:..', 'CD:..']
+
+def test_up_a_folder_where_cd_dotdot_is_refused():
+    """the Ultimate's firmware 1.2+ (as SD2IEC and CMD drives) takes only CD:<-"""
+    run, t = _drive_rig({45: 'DOWNLOADS', 87: 'UPLOADS'}, refuse=('CD:..',))
+    assert run(1) == ['CD:DOWNLOADS']
+    assert run(2) == ['CD:..', 'CD:_', 'CD:UPLOADS']
 
 def test_browser_paths():
     t = fresh(); m = t.mpu.memory; PATH, NAME = 0xC3E0, 0xC100

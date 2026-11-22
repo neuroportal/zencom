@@ -109,10 +109,10 @@ def xmodem_recv(t, log):
     out = bytearray()
     expect, crc = 1, True
     for start in range(30):                                # ~90 s: a 1541 is slow to
-        t.send([ord('C') if crc else NAK])                 # list and open the file
-        b = t.getb(3)
+        if start == 4: crc = False                         # list and open the file; a
+        t.send([ord('C') if crc else NAK])                 # block answering the 4th C
+        b = t.getb(3)                                      # is still CRC
         if b is not None: break
-        if start == 3: crc = False
     else:
         return None
     while True:
